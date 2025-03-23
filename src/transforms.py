@@ -1,17 +1,25 @@
 '''
-    Handles transforms from imported audio to spectrogram
-    Currently supports: musdb stems
+    Handles data transforms
 '''
-
 import torch
-import torchaudio
-import numpy as np
-import argparse
-import data
+from torch import stft
+from torch import nn
 
-'''
-waveform, sample_rate = torchaudio.load()
-spectrogram = torch.stft(
-    waveform, n_fft, hop_length=None, win_length=None, window=None, center=True, pad_mode='reflect', normalized=False, onesided=None, return_complex=None)
-print(torch.__version__)
-'''
+def stft_transform(waveform, n_fft=1024, hop_length=512, center = True):
+    '''
+        Converts a waveform to a spectrogram using Short Term Fourier Transform
+        Inputs: 
+            waveform (tensor), 
+            n_fft (size of fourier transform), 
+            hop_length (distance between neighboring sliding window frames)
+            center: whether to pad input. defaults to true
+    '''
+    window = nn.Parameter(torch.hann_window(n_fft), requires_grad=False)
+    spectrogram = stft(
+        waveform,
+        n_fft = n_fft,
+        hop_length = hop_length,
+        center = center,
+        return_complex = True
+    )
+    return spectrogram.abs() # Return magnitude spectrogram

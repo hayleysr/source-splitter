@@ -7,13 +7,14 @@ import argparse
 import random
 from typing import Optional
 
-import os
 from tqdm import tqdm
 
 # Torch imports
 import torch
-import torchaudio
 from torch.utils.data import DataLoader #process data in batches
+
+# Internal imports
+from transforms import stft_transform
 
 def load_data(parser, args):
     '''
@@ -101,11 +102,15 @@ class MUSDB():
         mixture = mixture[:, start:start + self.num_samples]
         target = target[:, start:start + self.num_samples]
 
-        # output as torch tensors
+        # convert to tensors
         mixture = torch.tensor(mixture, dtype=torch.float32)
         target = torch.tensor(target, dtype=torch.float32)
 
-        return mixture, target
+        # apply stft
+        mixture_spectrogram = stft_transform(mixture)
+        target_spectrogram = stft_transform(target)
+
+        return mixture_spectrogram, target_spectrogram
 
     def __len__(self):
         return len(self.mus.tracks) * self.samples_per_track

@@ -1,2 +1,4 @@
 musdb18/
 mydata/
+src/output/
+src/__pycache__/
