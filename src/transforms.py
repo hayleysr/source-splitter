@@ -3,9 +3,8 @@
 '''
 import torch
 from torch import stft
-from torch import nn
 
-def stft_transform(waveform, n_fft=1024, hop_length=512, center = True):
+class STFT:
     '''
         Converts a waveform to a spectrogram using Short Term Fourier Transform
         Inputs: 
@@ -14,12 +13,24 @@ def stft_transform(waveform, n_fft=1024, hop_length=512, center = True):
             hop_length (distance between neighboring sliding window frames)
             center: whether to pad input. defaults to true
     '''
-    window = nn.Parameter(torch.hann_window(n_fft), requires_grad=False)
-    spectrogram = stft(
-        waveform,
-        n_fft = n_fft,
-        hop_length = hop_length,
-        center = center,
-        return_complex = True
-    )
-    return spectrogram.abs() # Return magnitude spectrogram
+    def __init__(self, n_fft = 1024, hop_length = 512, center = True):
+        self.n_fft = n_fft
+        self.hop_length = hop_length
+        self.center = center
+        self.window = torch.hann_window(window_length=self.n_fft, periodic=True)
+
+    def __call__(self, waveform):
+        if isinstance(waveform, tuple): # Handle multiple tensors
+            mixture, target = waveform
+            return self._compute_stft(mixture), self._compute_stft(target)
+        return self._compute_stft(waveform) # Handle single tensor
+    
+    def _compute_stft(self, waveform):
+        return stft(
+            waveform,
+            n_fft = self.n_fft,
+            hop_length = self.hop_length,
+            center = self.center,
+            window = self.window,
+            return_complex = True
+        )

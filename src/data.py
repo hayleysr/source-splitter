@@ -13,9 +13,6 @@ from tqdm import tqdm
 import torch
 from torch.utils.data import DataLoader #process data in batches
 
-# Internal imports
-from transforms import stft_transform
-
 def load_data(parser, args):
     '''
         Input: CLI parser and argument prompts for dataset
@@ -106,11 +103,7 @@ class MUSDB():
         mixture = torch.tensor(mixture, dtype=torch.float32)
         target = torch.tensor(target, dtype=torch.float32)
 
-        # apply stft
-        mixture_spectrogram = stft_transform(mixture)
-        target_spectrogram = stft_transform(target)
-
-        return mixture_spectrogram, target_spectrogram
+        return mixture, target
 
     def __len__(self):
         return len(self.mus.tracks) * self.samples_per_track

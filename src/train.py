@@ -4,6 +4,7 @@
 # Arg imports
 import argparse
 from pathlib import Path
+from tqdm.auto import tqdm
 
 # Torch imports
 import torch
@@ -11,7 +12,7 @@ from torch.utils.data import DataLoader
 
 # Internal imports
 import data
-import transforms
+from transforms import STFT
 
 def train():
     # use the code with optimizers and loss
@@ -43,9 +44,19 @@ def main():
     # Load datasets from data
     train_data, test_data, args = data.load_data(parser, args)
 
+    train_duration = 0
+    for i in tqdm(range(len(train_data))): #progress marker
+        x, y = train_data[i]
+        train_duration += x.shape[1] / train_data.sample_rate #count length of clip trained
+
     # Set output path
     output_dir = Path("./output")
     output_dir.mkdir(parents=True, exist_ok=True) # Create directory if it does not yet exist
+
+    # Apply STFT transform
+    stft_transform = STFT(n_fft = 1024, hop_length=512)
+    train_data = [stft_transform(x) for x in tqdm(train_data, desc="Applying STFT")]
+    test_data = [stft_transform(x) for x in tqdm(test_data, desc="Applying STFT")]
 
     # Call dataloader from torch
     loaders = {
@@ -58,9 +69,6 @@ def main():
                             shuffle = True, 
                             num_workers = 2)
         }
-    
-    for x, y in loaders['train']:
-        print(f"Mixture spectrogram shape: {x.shape}, Target spectrogram shape: {y.shape}")
 
     # send encoder to device
     # separator config?? 
