@@ -33,4 +33,4 @@ class STFT:
             center = self.center,
             window = self.window,
             return_complex = True
-        )
+        ).abs()

@@ -78,7 +78,7 @@ class MUSDB():
         self.sample_rate = 44100.0      # sample rate of musdb
         self.num_samples = int(self.duration * self.sample_rate)
 
-        self.mus.tracks = self.mus.tracks[:5]  #limit to 5 tracks for testing
+        self.mus.tracks = self.mus.tracks[:1]  #limit to 1 track for testing
 
     '''
     TODO: reference open-unmix's difference between train and test sets for refining

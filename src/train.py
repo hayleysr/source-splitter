@@ -5,27 +5,54 @@
 import argparse
 from pathlib import Path
 from tqdm.auto import tqdm
+import tqdm as tq
 
 # Torch imports
 import torch
+import torch.optim as optim
 from torch.utils.data import DataLoader
 
 # Internal imports
 import data
 from transforms import STFT
+import model
 
-def train():
-    # use the code with optimizers and loss
-    return 0
+def train(unet, device, loader, loss_fn, optimizer):
+    unet.train()
+    losses = []
+    pbar = tqdm(loader, desc="Training")
+    for x, y in pbar:
+        x, y = x.to(device), y.to(device)
+        optimizer.zero_grad()
+        y_pred = unet(x)
+        loss = loss_fn(y_pred, y)
+        loss.backward()
+        optimizer.step()
 
-def test():
-    # use the same code but the test side
-    return 0
+        losses.append(loss.item())
+
+        pbar.set_postfix(loss=loss.item())
+
+    return sum(losses) / len(losses)
+
+def valid(unet, device, loader, loss_fn):
+    unet.eval()
+    losses = []
+
+    with torch.no_grad():
+        for x, y, in loader:
+            x, y = x.to(device), y.to(device)
+            y_pred = unet(x)
+            loss = loss_fn(y_pred, y)
+            losses.append(loss.item())
+
+    return sum(losses) / len(losses)
 
 def main():
     # CLI Configuration
     parser = argparse.ArgumentParser(description="Source Separation")
-    # Parameters: Which dataset to train with
+
+    # Parameters
     parser.add_argument('--dataset', 
                         type=str,
                         default='musdb',
@@ -34,8 +61,14 @@ def main():
                             'sourcefolder' #debug: don't use this yet
                         ],
                         help='Name of dataset, or specify your own')
+    parser.add_argument("--target",
+                        type=str,
+                        default="vocals",
+                        help="Target source")
     parser.add_argument("--nfft", type=int, default=4096, help="STFT fft size and window size")
     parser.add_argument("--nhop", type=int, default=1024, help="STFT hop size")
+    parser.add_argument("--lr", type=float, default=0.001, help="Learning rate defaults 0.001")
+    parser.add_argument("--num_epochs", type=int, default=10, help="Number of training epochs")
     args, _ = parser.parse_known_args() #only return dict
 
     # Initialize torch
@@ -45,7 +78,7 @@ def main():
     train_data, test_data, args = data.load_data(parser, args)
 
     train_duration = 0
-    for i in tqdm(range(len(train_data))): #progress marker
+    for i in tqdm(range(len(train_data)), desc="Loading datasets"): #progress marker
         x, y = train_data[i]
         train_duration += x.shape[1] / train_data.sample_rate #count length of clip trained
 
@@ -69,15 +102,43 @@ def main():
                             shuffle = True, 
                             num_workers = 2)
         }
+    
+    # Initialize model, loss, and optimizer
+    unet = model.UNet().to(device)
+    optimizer = optim.Adam(unet.parameters(), lr=args.lr)
+    loss_fn = model.SDRLoss()
 
-    # send encoder to device
-    # separator config?? 
-    # initialize our model (use an if/else if someone's feeding in their model)
-    # set optimizer to adam
-    # checkpointing? or initialize arrays of losses and times, also start tqdm
-    # call train and test for each epoch and append to array
-    # then call utils.save_checkpoint() with state_dict()s
-    # save params
+    train_losses = []
+    valid_losses = []
+
+    tqdm_range = tq.trange(1, args.num_epochs + 1)
+
+    # Training loop
+    for epoch in tqdm_range:
+       # for x, y in loaders["train"]:
+            #print("Input to UNet (x):", x)
+            #print("Contains NaN:", torch.isnan(x).any())
+        train_loss = train(unet, device, loaders["train"], loss_fn, optimizer)
+        valid_loss = valid(unet, device, loaders["test"], loss_fn)
+        train_losses.append(train_loss)
+        valid_losses.append(valid_loss)
+
+        tqdm_range.set_postfix(train_loss=train_loss, val_loss=valid_loss)
+        
+        model.save({"state_dict": unet.state_dict(),
+                    "epoch": epoch + 1,
+                    "optimizer": optimizer.state_dict()},
+                    path= output_dir,
+                    target=args.target,
+                    checkpoint=True)
+    
+    # Save model
+    model.save({"state_dict": unet.state_dict(),
+                "epoch": epoch + 1,
+                "optimizer": optimizer.state_dict()},
+                path= output_dir,
+                target=args.target,
+                checkpoint=False)
 
 if __name__ == "__main__":
     main()
