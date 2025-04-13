@@ -1,10 +1,11 @@
 ## Python Dependencies:
 ##### Torch Dependencies
-Torch\\
-TorchAudio\\
+Torch\
+TorchAudio\
 ##### Database Dependencies
-MusDB\\
-MusEval\\
-FFMPEG\\
+MusDB\
+MusEval\
+FFMPEG\
 ##### CLI Dependencies
-ArgParse\\
+ArgParse\
+Dotenv\

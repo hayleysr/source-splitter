@@ -5,6 +5,10 @@ import torchaudio
 
 # Util imports
 import os
+import json
+
+# Internal imports
+from utils import get_device, to_device
 
 class UNet(nn.Module):
     def __init__(self):
@@ -27,9 +31,9 @@ class UNet(nn.Module):
         )
 
         self.decoder = nn.Sequential(
-            nn.ConvTranspose2d(in_channels=128, out_channels=64, kernel_size=2, stride=2, output_padding=1),
+            nn.ConvTranspose2d(in_channels=128, out_channels=64, kernel_size=2, stride=2),
             nn.ReLU(),
-            nn.ConvTranspose2d(in_channels=64, out_channels=2, kernel_size=2, stride=2, output_padding=1)
+            nn.ConvTranspose2d(in_channels=64, out_channels=2, kernel_size=2, stride=2)
         )
 
         self._initialize_weights()
@@ -43,42 +47,15 @@ class UNet(nn.Module):
                         nn.init.zeros_(m.bias)  # Initialize bias to 0
 
     def forward(self, x):
-        '''
-        print("Input:", x.shape, "NaNs:", torch.isnan(x).any().item(), "Min:", x.min().item(), "Max:", x.max().item())
-    
-        x = self.encoder[0](x)  # First Conv2d
-        conv1 = self.encoder[0]
-        print("Conv1 Weights Min:", conv1.weight.min().item(), "Max:", conv1.weight.max().item())
-        print("After Conv1:", x.shape, "NaNs:", torch.isnan(x).any().item(), "Min:", x.min().item(), "Max:", x.max().item())
-        
-        x = self.encoder[1](x)  # ReLU
-        print("After ReLU1:", x.shape, "NaNs:", torch.isnan(x).any().item(), "Min:", x.min().item(), "Max:", x.max().item())
-
-        x = self.encoder[2](x)  # MaxPool
-        print("After Pool1:", x.shape, "NaNs:", torch.isnan(x).any().item(), "Min:", x.min().item(), "Max:", x.max().item())
-
-        x = self.encoder[3](x)  # Second Conv2d
-        print("After Conv2:", x.shape, "NaNs:", torch.isnan(x).any().item(), "Min:", x.min().item(), "Max:", x.max().item())
-
-        x = self.encoder[4](x)  # ReLU
-        print("After ReLU2:", x.shape, "NaNs:", torch.isnan(x).any().item(), "Min:", x.min().item(), "Max:", x.max().item())
-
-        x = self.encoder[5](x)  # MaxPool
-        print("After Pool2:", x.shape, "NaNs:", torch.isnan(x).any().item(), "Min:", x.min().item(), "Max:", x.max().item())
-
-        x = self.decoder[0](x)  # First ConvTranspose2d
-        print("After Deconv1:", x.shape, "NaNs:", torch.isnan(x).any().item(),"Min:", x.min().item(), "Max:", x.max().item())
-
-        x = self.decoder[1](x)  # ReLU
-        print("After ReLU3:", x.shape, "NaNs:", torch.isnan(x).any().item(), "Min:", x.min().item(), "Max:", x.max().item())
-
-        x = self.decoder[2](x)  # Second ConvTranspose2d
-        print("After Deconv2:", x.shape, "NaNs:", torch.isnan(x).any().item(), "Min:", x.min().item(), "Max:", x.max().item())
-
-        return x
-        '''
         x = self.encoder(x)
         x = self.decoder(x)
+        # print(f"Input: {x.shape}")
+        # for i, layer in enumerate(self.encoder):
+        #     x = layer(x)
+        #     print(f"Encoder {i}: {x.shape}")
+        # for i, layer in enumerate(self.decoder):
+        #     x = layer(x)
+        #     print(f"Decoder {i}: {x.shape}")
         return x
     
 class SDRLoss(nn.Module):
@@ -96,19 +73,17 @@ class SDRLoss(nn.Module):
             Formula: 10log_10(target^2/error^2)
         '''
         # Match dimensions
-        min_freq_dim = min(target.shape[1], pred.shape[1])  
-        min_time_dim = min(target.shape[-1], pred.shape[-1])  
-
-        target = target[:, :min_freq_dim, :min_time_dim]  
-        pred = pred[:, :min_freq_dim, :min_time_dim]  
+        min_freq = min(pred.shape[-2], target.shape[-2])
+        min_time = min(pred.shape[-1], target.shape[-1])
+        pred = pred[..., :min_freq, :min_time]
+        target = target[..., :min_freq, :min_time] 
 
         # Calculate loss
-        numerator = torch.sum(pow(target, 2), dim=(1,2))
-        denominator = torch.sum(pow((target - pred), 2), dim=(1,2))
-        sdr = 10 * torch.log10(numerator / (denominator + self.eps))
-        #if torch.isnan(-1 * torch.mean(sdr)):
-            #print(f"Not a number! Numerator: {numerator}, Denominator: {denominator}")
-        return -1 * torch.mean(sdr)
+        target_pow = target.pow(2).sum((1,2)) + self.eps
+        error_pow = (target - pred).pow(2).sum((1,2)) + self.eps
+        sdr = 10 * (target_pow / error_pow).log10()
+        
+        return -sdr.mean()
 
     
 def save(
@@ -124,3 +99,23 @@ def save(
     if checkpoint:
         torch.save(state, os.path.join(path, target + ".chkpnt"))
     torch.save(state["state_dict"], os.path.join(path, target + ".pth"))
+
+def load(path: str, target: str):
+    device = get_device()
+
+    model_path = os.path.join(path, target + ".pth")
+    json_path = os.path.join(path, target + ".json")
+
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(f"Model path ${model_path} does not exist in your files!")
+    if not os.path.exists(json_path):
+        raise FileNotFoundError(f"Json path ${json_path} does not exist in your files!")
+    
+    with open(json_path, "r") as stream:
+        json_args = json.load(stream)
+
+    model = UNet()
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    model.eval()
+
+    return model, json_args
