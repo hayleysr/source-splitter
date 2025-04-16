@@ -49,19 +49,12 @@ class UNet(nn.Module):
     def forward(self, x):
         x = self.encoder(x)
         x = self.decoder(x)
-        # print(f"Input: {x.shape}")
-        # for i, layer in enumerate(self.encoder):
-        #     x = layer(x)
-        #     print(f"Encoder {i}: {x.shape}")
-        # for i, layer in enumerate(self.decoder):
-        #     x = layer(x)
-        #     print(f"Decoder {i}: {x.shape}")
         return x
     
 class SDRLoss(nn.Module):
     def __init__(self, eps=1e-8):
         super(SDRLoss, self).__init__()
-        self.eps = eps # Avoids div by 0
+        self.eps = eps # avoid div by 0
 
     def forward(self, pred, target):
         '''
@@ -72,13 +65,13 @@ class SDRLoss(nn.Module):
             Outputs: SDR loss
             Formula: 10log_10(target^2/error^2)
         '''
-        # Match dimensions
+        # match dimensions
         min_freq = min(pred.shape[-2], target.shape[-2])
         min_time = min(pred.shape[-1], target.shape[-1])
         pred = pred[..., :min_freq, :min_time]
         target = target[..., :min_freq, :min_time] 
 
-        # Calculate loss
+        # calculate loss
         target_pow = target.pow(2).sum((1,2)) + self.eps
         error_pow = (target - pred).pow(2).sum((1,2)) + self.eps
         sdr = 10 * (target_pow / error_pow).log10()
@@ -101,6 +94,10 @@ def save(
     torch.save(state["state_dict"], os.path.join(path, target + ".pth"))
 
 def load(path: str, target: str):
+    '''
+        Input: path, target file name
+        Outputs: pre-trained model, args
+    '''
     device = get_device()
 
     model_path = os.path.join(path, target + ".pth")

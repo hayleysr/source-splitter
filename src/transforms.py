@@ -2,6 +2,7 @@
     Handles data transforms
 '''
 import torch
+import torch.nn.functional as F
 from torch import stft
 
 class STFT:
@@ -41,26 +42,37 @@ class STFT:
         return magnitude, phase
     
     def reconstruct_waveform(self, predicted_magnitude, original_phase):
-        # Crop frequency to original size (n_fft//2 + 1)
-        original_freq = self.n_fft // 2 + 1
-        predicted_magnitude = predicted_magnitude[..., :original_freq, :]
-        original_phase = original_phase[..., :original_freq, :]
+        # match frequency dimension to n_fft//2 + 1
+        required_freq = self.n_fft // 2 + 1
+        current_freq = predicted_magnitude.shape[-2]
+        
+        if current_freq < required_freq:
+            # if too small, pad with zeroes
+            pad_amount = required_freq - current_freq
+            predicted_magnitude = F.pad(predicted_magnitude, (0, 0, 0, pad_amount))
+            original_phase = F.pad(original_phase, (0, 0, 0, pad_amount))
+        elif current_freq > required_freq:
+            # if too large, truncate
+            predicted_magnitude = predicted_magnitude[..., :required_freq, :]
+            original_phase = original_phase[..., :required_freq, :]
 
         mag_cpu = predicted_magnitude.to('cpu')
         phase_cpu = original_phase.to('cpu')
-        
         complex_stft = mag_cpu * torch.exp(1j * phase_cpu)
 
+        '''
+        Debug Prints
         print(f"Input magnitude shape: {predicted_magnitude.shape}")
         print(f"Input phase shape: {original_phase.shape}")
         print(f"Complex STFT shape: {complex_stft.shape}")
+        '''
 
         if complex_stft.dim() == 4:
-            # Process each item in batch separately
+            # process each item in batch separately
             waveforms = []
             for i in range(complex_stft.shape[0]):
                 wav = torch.istft(
-                    complex_stft[i],  # Now shape [channels, freq, time]
+                    complex_stft[i],  # shape set to [channels, freq, time]
                     n_fft=self.n_fft,
                     hop_length=self.hop_length,
                     window=self.window,
@@ -69,6 +81,7 @@ class STFT:
                 waveforms.append(wav)
             return torch.stack(waveforms)
         else:
+            # process one track (no batches)
             return torch.istft(
                 complex_stft,
                 n_fft=self.n_fft,
